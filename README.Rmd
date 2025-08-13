@@ -1,0 +1,59 @@
+---
+title: "README"
+author: "Camila Montesinos Guevara"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+# 7C Attitudinal Profiles and COVID-19 Vaccination Behaviour in France: A Pre-Registered Study
+
+## Description
+
+This study aims to identify attitudinal profiles based on the 7C model and examine how these profiles relate to actual vaccination behaviour. Specifically, the study seeks to:
+
+1.  Identify latent classes representing 7C vaccine attitudinal profiles.\
+2.  Assess the associations between these profiles and two main outcomes:
+    -   Up-to-date vaccination status\
+    -   Uptake speed (vaccination delay \> 30 days)\
+        while adjusting for key sociodemographic factors and regional variation.\
+3.  Predict individuals’ vaccination behaviour based on their class membership according to the 7C antecedents of vaccination.
+
+## Main Features
+
+This cross-sectional secondary analysis used data from the ComCor case–control study in France, focusing on participants who completed the 2022 *Cognitif* questionnaire assessing COVID-19 vaccination attitudes via a shortened 7C model.
+
+-   **Data**: Comcor/Cognitif database.\
+
+-   **Outcomes**: Two binary vaccination behaviour outcomes — up-to-date vaccination status and \>30-day vaccination delay.\
+
+-   **Covariates**: Sociodemographic and health-related factors.\
+
+-   **Methodology**:
+
+    -   Latent Class Analysis (LCA) applied to SARS-CoV-2–infected participants (cases), split into training and validation sets. This allow to create 7 attitudinal profiles.
+    -   Cases validation and Controls served as an external validation groups.\
+    -   Model selection balanced statistical fit, interpretability, and classification certainty.\
+    -   Multivariable mixed-effects logistic regression assessed associations between profiles and vaccination outcomes.\
+    -   Model performance evaluated using ROC curves, AUC, sensitivity, specificity, and Matthews Correlation Coefficient.
+
+-   **Software**: All analyses conducted in **R 4.3.3**.
+
+## Installation
+
+1.  Clone this repository to your local machine: \`\`\`bash git clone <https://github.com/cmontesi3/7C_latent-profiles.git>
+
+2.  Open the project folder in RStudio.
+
+3.  Run the code in the R Markdown file (.Rmd) using your dataset.
+
+    Note: The code is tailored for the dataset used in this study. If you use your own dataset, some variables may need to be renamed or recoded to match the original data structure before running the .Rmd file.
+
+4.  All R packages required are listed in the R Markdown file.
+
+## Author
+
+Developed by Camila Montesinos Guevara.
+
+## License
+
+Currently unlicensed.
