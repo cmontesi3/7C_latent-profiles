@@ -1,0 +1,2538 @@
+---
+title: "7C_profiles_LCA_Regression"
+output: word_document
+date: "10-07-2025"
+---
+```{r Packages,  echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+library("dplyr")
+library("stringr")
+library("naniar")
+library("VIM")
+library("stringr")
+library("poLCA")
+library("MASS")
+library("scatterplot3d")
+library("gridExtra")
+library("grid")
+library("reshape2")
+library("gt")
+library("tidyverse")
+library("broom")
+library("gtsummary")
+library("car")
+library("lme4")
+library("lmtest")
+library("purrr")
+library("knitr")
+library("writexl")
+library("sjPlot")
+library("numDeriv")
+library("pROC")
+library("caret")
+library("mltools")
+library("data.table")
+library("ggplot2")
+```
+
+## 1. DATA HANDLING FOR ANALYSIS
+
+### 1.1.Setting up database 
+
+```{r cognitiv, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+cognitiv  <- read.csv("bd_merged_fin.csv", sep = ",")
+
+#Rename variables
+
+cognitiv <- cognitiv %>%
+  rename(
+    # LCA manifest variables
+    C3_1 = peur_effets_secondaires,
+    C3_2 = peur_forme_grave,
+    C3_3 = difficulte_rdv_vaccin,
+    C3_4 = benefices_sup_risques,
+    C3_5 = vaccin_action_collective,
+    C4   = entourage_favorable,
+    C5   = gouvernement_incitation,
+
+    # Demographic and other variables
+    QSEXE = sexe,
+    QAGE = age_cat_1,
+    QREG = reg,
+    R4 = rename_categ_pro,
+    QG16 = diplome,
+    QG18 = pays_naiss,
+    QG11_1 = diabete,
+    QG11_2 = hta,
+    QG11_3 = ap_idm,
+    QG11_4 = mal_respi,
+    QG11_5 = aucune_mal,
+    QG11_6 = pasrep_mal,
+    CA9B3 = index_vaccin_inj,
+    Vaccine_status = statut_vaccin2,
+    Sanitary_pass = niveau_vaccin,
+    Uptake_speed = uptake_speed
+  )
+
+```
+
+### 1.2. Recoding data
+
+```{r Recode, echo=FALSE, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+cognitiv <- cognitiv %>%
+  mutate(
+    C3_1 = case_when(
+      C3_1 == "Pas du tout d'accord" ~ 1,
+      C3_1 == "Plutôt pas d'accord" ~ 2,
+      C3_1 == "Ne sais pas / indécis" ~ 3,
+      C3_1 == "Plutôt d'accord" ~ 4,
+      C3_1 == "Tout à fait d'accord" ~ 5,
+      C3_1 == "Ne souhaite pas répondre" ~ 6,
+      TRUE ~ NA_real_
+    ),
+    C3_2 = case_when(
+      C3_2 == "Pas du tout d'accord" ~ 1,
+      C3_2 == "Plutôt pas d'accord" ~ 2,
+      C3_2 == "Ne sais pas / indécis" ~ 3,
+      C3_2 == "Plutôt d'accord" ~ 4,
+      C3_2 == "Tout à fait d'accord" ~ 5,
+      C3_2 == "Ne souhaite pas répondre" ~ 6,
+      TRUE ~ NA_real_
+    ),
+    C3_3 = case_when(
+      C3_3 == "Pas du tout d'accord" ~ 1,
+      C3_3 == "Plutôt pas d'accord" ~ 2,
+      C3_3 == "Ne sais pas / indécis" ~ 3,
+      C3_3 == "Plutôt d'accord" ~ 4,
+      C3_3 == "Tout à fait d'accord" ~ 5,
+      C3_3 == "Ne souhaite pas répondre" ~ 6,
+      TRUE ~ NA_real_
+    ),
+    C3_4 = case_when(
+      C3_4 == "Pas du tout d'accord" ~ 1,
+      C3_4 == "Plutôt pas d'accord" ~ 2,
+      C3_4 == "Ne sais pas / indécis" ~ 3,
+      C3_4 == "Plutôt d'accord" ~ 4,
+      C3_4 == "Tout à fait d'accord" ~ 5,
+      C3_4 == "Ne souhaite pas répondre" ~ 6,
+      TRUE ~ NA_real_
+    ),
+    C3_5 = case_when(
+      C3_5 == "Pas du tout d'accord" ~ 1,
+      C3_5 == "Plutôt pas d'accord" ~ 2,
+      C3_5 == "Ne sais pas / indécis" ~ 3,
+      C3_5 == "Plutôt d'accord" ~ 4,
+      C3_5 == "Tout à fait d'accord" ~ 5,
+      C3_5 == "Ne souhaite pas répondre" ~ 6,
+      TRUE ~ NA_real_
+    ),
+    C4 = case_when(
+      C4 == "Très sceptique" ~ 1,
+      C4 == "Plutôt sceptique" ~ 2,
+      C4 == "Les opinions sceptiques et favorables sont représentées à parts égales" ~ 3,
+      C4 == "Plutôt favorable" ~ 4,
+      C4 == "Très favorable" ~ 5,
+      TRUE ~ NA_real_
+    ),
+    C5 = case_when(
+      C5 == "Vous encourage à le faire" ~ 1,
+      C5 == "N'a pas d'effet sur vous" ~ 2,
+      C5 == "Vous dissuade" ~ 3,
+      TRUE ~ NA_real_
+    ),
+    QCIBLE = case_when(
+      QCIBLE == "CIBLE A = CAS INDEX (Recrutés par la CNAM)" ~ 1,
+      QCIBLE == "CIBLE B = PROCHES (Invités par le cas)" ~ 2,
+      QCIBLE == "CIBLE C = TEMOIN DISTANT (Recrutés par Ipsos)" ~ 3,
+      TRUE ~ NA_real_
+    ),
+    QSEXE = case_when(QSEXE == "Homme" ~ 1, QSEXE == "Femme" ~ 2, TRUE ~ NA_real_),
+    QAGE = case_when(
+      QAGE == "18-28 ans" ~ 1,
+      QAGE == "29-38 ans" ~ 2,
+      QAGE == "39-48 ans" ~ 3,
+      QAGE == "49-58 ans" ~ 4,
+      QAGE == "59-68 ans" ~ 5,
+      QAGE == "69 ans et plus" ~ 6,
+      TRUE ~ NA_real_
+    ),
+    QREG = case_when(
+      QREG == "Île-de-France" ~ 1,
+      QREG == "Centre - Val de Loire" ~ 2,
+      QREG == "Bourgogne -Franche-Comté" ~ 3,
+      QREG == "Normandie" ~ 4,
+      QREG == "Hauts-de-France" ~ 5,
+      QREG == "Grand Est" ~ 6,
+      QREG == "Pays de la Loire" ~ 7,
+      QREG == "Bretagne" ~ 8,
+      QREG == "Nouvelle-Aquitaine" ~ 9,
+      QREG == "Occitanie" ~ 10,
+      QREG == "Auvergne-Rhône-Alpes" ~ 11,
+      QREG == "Provence-Alpes-Côte d'Azur + Corse" ~ 12,
+      QREG == "DOM-TOM" ~ 13,
+      TRUE ~ NA_real_
+    ),
+    R4 = case_when(
+      R4 == "Agriculteurs exploitants" ~ 1,
+      R4 == "Professions Indépendantes" ~ 2,
+      R4 == "Cadres Supérieurs" ~ 3,
+      R4 == "Professions intermédiaires" ~ 4,
+      R4 == "Employés" ~ 5,
+      R4 == "Ouvriers" ~ 6,
+      R4 == "Retraités" ~ 7,
+      R4 == "Inactifs" ~ 8,
+      TRUE ~ NA_real_
+    ),
+    QG16 = str_trim(QG16),
+    QG16 = case_when(
+      QG16 == "Jamais allé à l'école" ~ 1,
+      QG16 == "Aucun diplome / scolarité finie avant lycée" ~ 2,
+      QG16 == "Aucun diplome / scolarité finie après lycée" ~ 3,
+      QG16 == "CEP (certificat d'études primaires)" ~ 4,
+      QG16 == "BEPC (brevet des collèges)" ~ 5,
+      QG16 == "CAP, BEP" ~ 6,
+      QG16 == "Bac général ou techno" ~ 7,
+      QG16 == "Brevet supérieur, capacité en droit, DAEU, ESEU" ~ 8,
+      QG16 == "Bac pro, brevet pro" ~ 9,
+      QG16 == "BTS, DUT, Bac +2" ~ 10,
+      QG16 == "Licence, licence pro, Maitrîse, Bac +3/+4" ~ 11,
+      QG16 == "Master, DEA, DESS, Diplôme grande école bac+5, Doctorat de santé" ~ 12,
+      QG16 == "Doctorat de recherche (hors santé)" ~ 13,
+      TRUE ~ NA_real_
+    ),
+    QG18 = case_when(
+      QG18 == "En France" ~ 1,
+      QG18 == "A l'étranger" ~ 2,
+      QG18 %in% c("NSP", "Ne souhaite pas répondre") ~ NA_real_,
+      TRUE ~ NA_real_
+    ),
+    CA9B3 = case_when(
+      CA9B3 == "Une seule injection" ~ 1,
+      CA9B3 == "Deux injections" ~ 2,
+      CA9B3 == "Trois injections" ~ 3,
+      CA9B3 == "Quatre injections" ~ 4,
+      TRUE ~ NA_real_
+    ),
+    Vaccine_status = case_when(
+      Vaccine_status == "Vacciné (une dose ou plus)" ~ 1,
+      Vaccine_status == "Non vacciné (aucune dose)" ~ 0,
+      TRUE ~ NA_real_
+    ),
+    Sanitary_pass = case_when(
+      Sanitary_pass == "Vacciné à jour avec le pass" ~ 1,
+      Sanitary_pass == "Vacciné mais pas à jour" ~ 0,
+      TRUE ~ NA_real_
+    ),
+    Uptake_speed = case_when(
+      Uptake_speed >= 30 ~ "Delayed",
+      Uptake_speed < 30 ~ "Not_delayed",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  mutate(across(starts_with("QG11_"), ~ case_when(
+    . == "Oui" ~ 1,
+    . == "Non" ~ 0,
+    TRUE ~ NA_real_
+  ))) %>%
+  mutate(
+    Comorbidities = apply(select(., starts_with("QG11_")), 1, function(row) {
+      if (all(is.na(row))) return(NA)
+      comorb_count <- sum(row[1:4] == 1, na.rm = TRUE)
+      no_disease_flag <- row[5] == 1
+      pns_flag <- row[6] == 1
+      if (pns_flag) return(NA)
+      if (no_disease_flag && comorb_count == 0) return(0)
+      if (comorb_count == 1) return(1)
+      if (comorb_count > 1) return(2)
+      return(NA)
+    })
+  ) %>%
+  mutate(
+    Sex = factor(QSEXE, levels = c(1, 2), labels = c("Male", "Female")),
+    Age = factor(QAGE, levels = 1:6, labels = c("18–28 years", "29–38 years", "39–48 years", "49–58 years", "59–68 years", "69+ years")),
+    Region = factor(QREG, levels = 1:13, labels = c("Île-de-France", "Centre-Val de Loire", "Bourgogne-Franche-Comté", "Normandy", "Hauts-de-France", "Grand Est", "Pays de la Loire", "Brittany", "Nouvelle-Aquitaine", "Occitanie", "Auvergne-Rhône-Alpes", "Provence-Alpes-Côte d’Azur + Corsica", "DOM-TOM")),
+    Professions = factor(R4, levels = 1:8, labels = c("Farmers", "Self-employed", "Senior executives", "Intermediate professions", "Employees", "Manual workers", "Retirees", "Inactive")),
+    Education = case_when(
+      QG16 %in% 1:6 ~ "Inf. Baccalaureate",
+      QG16 %in% 7:9 ~ "Bac. or equivalent",
+      QG16 %in% 10:11 ~ "Bac +2 to Bac +4",
+      QG16 %in% 12:13 ~ "Bac +5 to Bac +8",
+      TRUE ~ NA_character_
+    ),
+    Education = factor(Education, levels = c("Inf. Baccalaureate", "Bac. or equivalent", "Bac +2 to Bac +4", "Bac +5 to Bac +8")),
+    Comorbidities = factor(ifelse(Comorbidities == 3, NA, Comorbidities), levels = c(0, 1, 2), labels = c("No comorbidity", "One comorbidity", "Two or more comorbidities")),
+    Country_of_birth = factor(QG18, levels = c(1, 2), labels = c("France", "Abroad")),
+    Vaccine_doses = factor(CA9B3, levels = 1:4, labels = c("One dose", "Two doses", "Three doses", "Four doses")),
+    Vaccine_status = factor(Vaccine_status, levels = c(0, 1), labels = c("Not vaccinated", "Vaccinated")),
+    Sanitary_pass = factor(Sanitary_pass, levels = c(0, 1), labels = c("Not up to date", "Up to date")),
+    Uptake_speed = factor(Uptake_speed, levels = c("Not_delayed", "Delayed"))
+  ) %>%
+  select(-QSEXE, -QAGE, -QREG, -R4, -QG16, -QG18, -CA9B3)
+
+```
+
+### 1.3. Transforming and factorising data
+
+```{r Transforming variables, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+# Recoding C3_1 (swapping 1 with 5, 2 with 4; keeping 3 and 6 unchanged)
+cognitiv$C3_1 <- ifelse(cognitiv$C3_1 == 1, 5, 
+                 ifelse(cognitiv$C3_1 == 5, 1, 
+                 ifelse(cognitiv$C3_1 == 2, 4, 
+                 ifelse(cognitiv$C3_1 == 4, 2, cognitiv$C3_1))))
+
+cognitiv$C3_1 <- as.integer(cognitiv$C3_1)
+
+# Recoding C3_3 (swapping 1 with 5, 2 with 4; keeping 3 and 6 unchanged)
+cognitiv$C3_3 <- ifelse(cognitiv$C3_3 == 1, 5, 
+                 ifelse(cognitiv$C3_3 == 5, 1, 
+                 ifelse(cognitiv$C3_3 == 2, 4, 
+                 ifelse(cognitiv$C3_3 == 4, 2, cognitiv$C3_3))))
+
+cognitiv$C3_3 <- as.integer(cognitiv$C3_3)
+
+# Recodification C5 (swap 1 and 3, then map 1-3 scale to 1-5)
+cognitiv$C5 <- ifelse(cognitiv$C5 == 1, 3, 
+                 ifelse(cognitiv$C5 == 3, 1, 
+                 ifelse(cognitiv$C5 == 2, 2, cognitiv$C5)))
+
+# Interpolated Mapping (scale 1-3 → 1-5)
+cognitiv$C5 <- ifelse(cognitiv$C5 == 1, 1, 
+                ifelse(cognitiv$C5 == 2, 3, 
+                ifelse(cognitiv$C5 == 3, 5, NA))) 
+
+cognitiv$C5 <- as.integer(cognitiv$C5)
+
+#Replace value 6 with NA for specific variables
+
+vars_na <- c("C3_1", "C3_2", "C3_3", "C3_4", "C3_5")
+
+cognitiv[vars_na] <- lapply(cognitiv[vars_na], function(x) ifelse(x == 6, NA, x))
+
+# Factorising
+
+cognitiv$C3_1 <- factor(cognitiv$C3_1, ordered = TRUE)
+cognitiv$C3_2 <- factor(cognitiv$C3_2, ordered = TRUE)
+cognitiv$C3_3 <- factor(cognitiv$C3_3, ordered = TRUE)
+cognitiv$C3_4 <- factor(cognitiv$C3_4, ordered = TRUE)
+cognitiv$C3_5 <- factor(cognitiv$C3_5, ordered = TRUE)
+cognitiv$C4   <- factor(cognitiv$C4, ordered = TRUE)
+cognitiv$C5   <- factor(cognitiv$C5, ordered = TRUE)
+
+```
+
+### 1.4. Filtering
+
+```{r Needed variables, echo=FALSE, warning=FALSE, message=FALSE}
+
+cognitiv <- cognitiv %>%
+  dplyr::filter(QCIBLE != 2) %>%  # Exclude relatives
+  dplyr::select(
+    IDIPSOS, QCIBLE, C3_1, C3_2, C3_3, C3_4, C3_5, C4, C5,
+    Sex, Age, Comorbidities, Region, Professions, 
+    Education, Country_of_birth, Sanitary_pass, Uptake_speed,
+  )
+str(cognitiv)
+
+```
+
+### 1.5. Missing data
+
+```{r Checking Missing values, echo=FALSE, warning=FALSE, message=FALSE, eval=FALSE}
+
+# Computing missing value summary
+
+get_missing_summary <- function(data, variables, labels = NULL) {
+  missing_counts <- sapply(data[, variables], function(x) sum(is.na(x)))
+  missing_percentage <- sapply(data[, variables], function(x) mean(is.na(x)) * 100)
+  
+  if (is.null(labels)) labels <- variables
+  
+  summary_df <- data.frame(
+    Variable = labels,
+    Missing_Count = missing_counts,
+    Missing_Percentage = round(missing_percentage, 2)
+  )
+  
+  return(summary_df)
+}
+
+# Descriptive Variables
+
+descriptive_vars <- c(
+  "Sex", "Age", "Region", "Professions", "Education", "Country_of_birth", 
+  "Comorbidities", "QCIBLE", 
+  "Sanitary_pass", "Uptake_speed"
+)
+
+descriptive_labels <- c(
+  "Sex", "Age", "Region", "Profession", "Education", "Country of birth", 
+  "Comorbidities", "Infection status", 
+  "Sanitary pass", "Uptake speed"
+)
+
+# Summary table for descriptive vars
+desc_summary <- get_missing_summary(cognitiv, descriptive_vars, descriptive_labels)
+print(desc_summary)
+
+# Plot for descriptive vars
+aggr_plot_desc <- plot_missing_pattern(
+  cognitiv, descriptive_vars, descriptive_labels, 
+  file_name = "missing_data_pattern_descriptive.png"
+)
+
+# 7C Psychological Variables
+
+sevenC_vars <- c("C3_1", "C3_2", "C3_3", "C3_4", "C3_5", "C4", "C5")
+
+sevenC_labels <- c(
+  "Confidence", "Low complacency", "Convenience", 
+  "Calculation", "Collective responsibility", 
+  "Social conformism", "Confidence in system"
+)
+
+# Summary table for 7C vars
+sevenC_summary <- get_missing_summary(cognitiv, sevenC_vars, sevenC_labels)
+print(sevenC_summary)
+
+# Plot for 7C vars
+aggr_plot_7C <- plot_missing_pattern(
+  cognitiv, sevenC_vars, sevenC_labels, 
+  file_name = "missing_7C_variables.png", 
+  width = 2500, height = 1800, res = 300, cex_axis = 0.45
+)
+
+# col = c("#85A5D6", "#E8A95D")
+
+# Full Dataset Summary
+
+full_summary <- get_missing_summary(cognitiv, names(cognitiv))
+print(full_summary)
+
+```
+
+### 1.6. Testing missing data - Little MCAR test
+
+```{r Little MCAR test, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE, eval=FALSE}
+
+mcar_test(cognitiv)
+
+```
+
+p > 0.05 → missingness is likely MCAR.
+p < 0.05 → The data is likely not MCAR (could be MAR or MNAR).
+
+Interpretation:
+
+The results of Little's MCAR test show a Chi-square statistic of 19,430.55 with 1,897 degrees of freedom, and a p-value of 0. This extremely low p-value provides strong evidence against the null hypothesis that the data is Missing Completely At Random (MCAR). Therefore, the missingness in the dataset is likely Missing At Random (MAR) or Missing Not At Random (MNAR). Furthermore, the test identified 132 distinct missing data patterns, indicating a complex structure of missingness across multiple variables.
+
+### 1.7. Summary descriptive table
+
+```{r descriptives study population, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+tbl_summary(
+  data = cognitiv[, c("Sex", "Age", "Comorbidities", "Region", "Professions",
+                      "Education", "Country_of_birth", "Sanitary_pass", "Uptake_speed")],
+  type = c(
+    all_continuous() ~ "continuous2",
+    all_categorical() ~ "categorical"
+  ),
+  statistic = list(
+    all_continuous() ~ c("{mean} ({sd})", "{median} ({p25}, {p75})"),
+    all_categorical() ~ "{n} ({p}%)"
+  ),
+  digits = list(
+    all_categorical() ~ c(0, 1)
+  ),
+  missing = "ifany"
+)
+
+```
+
+### 1.8. Complete case analysis (CCA) for manifest variables
+
+```{r Cases, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+cognitiv <- cognitiv %>% drop_na(C3_1, C3_2, C3_3, C3_4, C3_5, C4, C5)
+
+```
+
+### 1.9. Subsetting
+
+```{r Cases and controls, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+# Cases
+cases <- cognitiv %>%
+  dplyr::filter(QCIBLE == 1) %>%
+  dplyr::select(
+  IDIPSOS, QCIBLE, C3_1, C3_2, C3_3, C3_4, C3_5, C4, C5,# Manifest variables used in LCA
+    Sex, Age, Comorbidities, Region, Professions, 
+    Education, Country_of_birth, Sanitary_pass, Uptake_speed, # Demographics
+  )
+
+# Set.seed for reproducibility and sample 80% for discovery set
+
+set.seed(123)
+cases_discovery <- cases %>%
+  sample_frac(0.8)
+cases_validation <- anti_join(cases, cases_discovery)
+
+
+#Controls
+
+control <- cognitiv %>%
+  dplyr::filter(QCIBLE == 3) %>%
+  dplyr::select(
+    IDIPSOS, QCIBLE, C3_1, C3_2, C3_3, C3_4, C3_5, C4, C5,# Manifest variables used in LCA
+    Sex, Age, Comorbidities, Region, Professions, 
+    Education, Country_of_birth, Sanitary_pass, Uptake_speed, # Demographics
+  )
+
+```
+
+
+### 1.10. Testing distribution of missing data 
+
+```{r Case missing data, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+#Cases
+
+# Function to summarize missing data
+summarize_missing <- function(data) {
+  missing_counts <- sapply(data, function(x) sum(is.na(x)))
+  missing_percentage <- sapply(data, function(x) mean(is.na(x)) * 100)
+  
+  data.frame(
+    Variable = names(missing_counts),
+    Missing_Count = missing_counts,
+    Missing_Percentage = round(missing_percentage, 2)
+  )
+}
+
+# Summarize missingness for discovery and validation sets
+missing_summary_discovery <- summarize_missing(cases_discovery)
+missing_summary_validation <- summarize_missing(cases_validation)
+
+print(missing_summary_discovery)
+print(missing_summary_validation)
+
+# Identify variables with any missing data
+vars_with_missing <- names(cases_discovery)[
+  colSums(is.na(cases_discovery)) > 0 | colSums(is.na(cases_validation)) > 0
+]
+
+# Combine datasets and add group label
+cases_discovery$Dataset <- "Discovery"
+cases_validation$Dataset <- "Validation"
+combined_data <- rbind(cases_discovery, cases_validation)
+
+# Plot missing data pattern
+png("missing_pattern_combined.png", width = 2500, height = 1800, res = 300)
+par(mar = c(8, 6, 6, 4))
+aggr(
+  combined_data[, vars_with_missing],
+  col = c("#85A5D6", "#E8A95D"),
+  numbers = TRUE,
+  sortVars = TRUE,
+  labels = vars_with_missing,
+  cex.axis = 0.45,
+  cex.numbers = 0.6,
+  gap = 3,
+  ylab = c("Missing data", "Pattern")
+)
+dev.off()
+
+# Function to test for difference in missingness
+missingness_test <- function(var) {
+  discovery_missing <- is.na(cases_discovery[[var]])
+  validation_missing <- is.na(cases_validation[[var]])
+  
+  contingency_table <- table(
+    Dataset = rep(c("Discovery", "Validation"),
+                  times = c(length(discovery_missing), length(validation_missing))),
+    Missing = c(discovery_missing, validation_missing)
+  )
+  
+  if (all(dim(contingency_table) == c(2, 2))) {
+    if (any(contingency_table < 5)) {
+      fisher.test(contingency_table)$p.value
+    } else {
+      chisq.test(contingency_table)$p.value
+    }
+  } else {
+    NA
+  }
+}
+
+# Apply the test
+missingness_pvalues <- sapply(vars_with_missing, missingness_test)
+sorted_pvalues <- sort(round(missingness_pvalues, 4), na.last = TRUE)
+print(sorted_pvalues)
+
+
+# Missing data controls
+
+sum(control$QCIBLE == 3, na.rm = TRUE)
+sum(is.na(control[control$QCIBLE == 3, ]))
+colSums(is.na(control[control$QCIBLE == 3, ]))
+table(rowSums(is.na(control[control$QCIBLE == 3, ])))
+
+```
+
+Note: when looking at the missingness comparison for *cases*, there is no significant differences between the discovery and validation datasets for key variables. While Comorbidities has a marginal p-value (0.0709), all values exceed the 0.05 threshold, suggesting missing data is similarly distributed across both datasets.For controls, there are 1463 observations with at least 1 NA.
+
+## 2. LCA ANALYSIS
+
+### 2.1. Model
+
+```{r LCA model , echo=FALSE}
+
+f <- cbind(C3_1, C3_2, C3_3, C3_4, C3_5, C4, C5) ~ 1  # Model formula without co-variates
+set.seed(123)  # Seed for reproducibility
+
+models <- list()
+bic_values <- numeric(7)
+aic_values <- numeric(7)
+chi2_values <- numeric(7)
+entropy_values <- numeric(7)
+
+# Fit models for k = 2 to 7
+for (k in 2:7) {
+  model <- poLCA(f, cases_discovery, nclass = k, maxiter = 10000, graphs = FALSE, 
+                 tol = 1e-10, na.rm = FALSE, probs.start = NULL, 
+                 nrep = 20, verbose = TRUE, calc.se = TRUE)
+
+  models[[k]] <- model
+  bic_values[k] <- model$bic
+  aic_values[k] <- model$aic
+  chi2_values[k] <- model$Chisq
+
+  # Compute entropy manually
+  post_probs <- model$posterior  # To get posterior class membership probabilities
+  entropy_values[k] <- 1 + sum(post_probs * log(post_probs), na.rm = TRUE) / (nrow(post_probs) * log(k))
+}
+
+# Compare models
+results_models <- data.frame(
+  Classes = 2:7,
+  BIC = bic_values[2:7],
+  AIC = aic_values[2:7],
+  Chi2 = chi2_values[2:7],
+  Entropy = entropy_values[2:7]
+)
+
+print(results_models)
+
+# Select the best model based on BIC
+best_k <- which.min(bic_values[2:7]) + 1
+best_model <- models[[best_k]]
+
+```
+
+Note: poLCA runs with na.rm = FALSE since NAs were already eliminated through CCA.
+
+### 2.2. Class Prevalence
+
+```{r Class Prevalence, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Class counts and proportions for best model
+class_counts <- table(best_model$predclass)
+class_prevalence <- prop.table(class_counts)
+
+#Table
+class_percentage <- data.frame(
+  Class = as.integer(names(class_counts)),
+  Count = as.vector(class_counts),
+  Proportion = round(100 * as.vector(class_prevalence), 1)  # in percent
+)
+
+print(class_percentage)
+
+# Conditional probabilities for each class
+# print(models[[7]]$probs)
+
+```
+
+### 2.3. Assumption of local dependence
+
+```{r Assumption local dependency test, echo=FALSE}
+
+# Compute Bivariate Residuals
+compute_bvr <- function(model, data) {
+  var_names <- names(model$probs)
+  num_vars <- length(var_names)
+  bvr_matrix <- matrix(NA, nrow = num_vars, ncol = num_vars, 
+                       dimnames = list(var_names, var_names))
+  
+  for (i in 1:(num_vars - 1)) {
+    for (j in (i + 1):num_vars) {
+      var1 <- var_names[i]
+      var2 <- var_names[j]
+
+      # Observed joint frequency table
+      observed <- table(data[[var1]], data[[var2]])
+      
+      # Expected under local independence
+      expected <- expected_counts(observed)
+
+      # Chi-square residuals
+      residuals <- (observed - expected)^2 / expected
+      bvr_matrix[i, j] <- sum(residuals, na.rm = TRUE)
+      bvr_matrix[j, i] <- bvr_matrix[i, j]
+    }
+  }
+  return(bvr_matrix)
+}
+
+# Compute Expected Counts assuming independence
+expected_counts <- function(observed) {
+  row_totals <- rowSums(observed)
+  col_totals <- colSums(observed)
+  grand_total <- sum(observed)
+  expected <- outer(row_totals, col_totals) / grand_total
+  return(expected)
+}
+
+# Run BVR Calculation
+bvr_results <- compute_bvr(best_model, cases_discovery)
+
+# Print BVR matrix
+print(bvr_results)
+
+# Identify High Residuals (BVR > 3.84)
+high_bvr_pairs <- which(bvr_results > 3.84, arr.ind = TRUE)
+
+# Create a data frame of significant BVR pairs
+high_bvr_pairs_df <- data.frame(
+  Variable1 = rownames(bvr_results)[high_bvr_pairs[, 1]],
+  Variable2 = colnames(bvr_results)[high_bvr_pairs[, 2]],
+  BVR_Value = bvr_results[high_bvr_pairs]
+)
+
+# Print pairs with high local dependency
+print(high_bvr_pairs_df)
+
+# Visualizing the BVR Matrix as a Heatmap
+bvr_melted <- reshape2::melt(bvr_results, na.rm = TRUE)
+
+bvr_heatmap_plot <- ggplot(bvr_melted, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(
+    low = "#3440AF", high = "#B5420C", mid = "white", midpoint = 3.84,
+    limits = c(min(bvr_melted$value), max(bvr_melted$value))
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Bivariate Residuals Heatmap",
+    x = "Variable 1",
+    y = "Variable 2",
+    fill = "BVR Value"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Save the heatmap to a PNG file
+ggsave("bvr_heatmap.png", plot = bvr_heatmap_plot, width = 18, height = 12, dpi = 300, bg = "white")
+
+```
+
+### 2.4. Goodness of fit indicators Plot
+
+```{r Goodness of fit indicators Plot, echo=FALSE}
+
+fit_data_long <- reshape(results_models,
+                         varying = c("BIC", "AIC", "Chi2", "Entropy"),
+                         v.names = "Value",
+                         times = c("BIC", "AIC", "Chi2", "Entropy"),
+                         timevar = "Indicator",
+                         direction = "long")
+
+
+# Generate individual plots
+indicators <- unique(fit_data_long$Indicator)
+
+plots <- lapply(indicators, function(ind) {
+  ggplot(subset(fit_data_long, Indicator == ind), aes(x = Classes, y = Value, color = Indicator)) +
+    geom_line(size = 0.6) +  # Make line thinner
+    geom_point(size = 1) +
+    labs(title = ind) +  
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      strip.text = element_text(size = 14, face = "bold"),  
+      axis.title.x = element_blank(),  
+      axis.title.y = element_blank(),  
+      axis.text.x = element_text(size = 8)  # Show x-axis labels on all plots
+    ) +
+    scale_x_continuous(breaks = 1:{7}, limits = c(1, 7)) +  # Ensure axis shows from 1 to 6
+    scale_color_manual(values = c("BIC" = "#B5420C", "AIC" = "#E8A95D", "Chi2" = "#85A5D6", "Entropy" = "#3440AF"))
+})
+
+# Labels for axes
+x_label <- textGrob("Number of Classes", gp = gpar(fontsize = 14, fontface = "bold"))
+y_label <- textGrob("Fit Statistics Value", rot = 90, gp = gpar(fontsize = 14, fontface = "bold"))
+
+# Arrange plots in a single column (one below the other)
+fit <- arrangeGrob(grobs = plots, ncol = 1, left = y_label, bottom = x_label)
+
+# Save the figure
+ggsave("fit_statistics.png", plot = fit, width = 8, height = 12, dpi = 300, bg = "white")
+
+```
+
+### 2.5. Class membership plot
+
+```{r Class membership plot, echo=FALSE}
+
+# Get conditional probabilities
+cond_probs <- models[[best_k]]$probs
+
+# Convert the list of matrices into a single data frame
+cond_probs_long <- bind_rows(
+  lapply(names(cond_probs), function(var) {
+    df <- as.data.frame(cond_probs[[var]])
+    df$Class <- rownames(cond_probs[[var]])  # Add class information
+    df$Variable <- var  # Add variable name
+    df
+  }),
+  .id = "Variable"
+)
+
+# Convert from wide to long format
+cond_probs_long <- reshape2::melt(cond_probs_long, id.vars = c("Class", "Variable"), 
+                                  variable.name = "Response", value.name = "Probability")
+
+# Clean up response labels (remove "Pr()")
+cond_probs_long$Response <- as.numeric(gsub("Pr\\(|\\)", "", cond_probs_long$Response))
+
+# Remove "class " prefix from Class variable
+cond_probs_long$Class <- gsub("class ", "", cond_probs_long$Class)
+cond_probs_long$Class <- factor(cond_probs_long$Class, levels = unique(cond_probs_long$Class))
+cond_probs_long$Probability[is.na(cond_probs_long$Probability)] <- 0
+
+# Check unique values of Variable before renaming
+print(unique(cond_probs_long$Variable))
+
+# To ensure Variables are correctly mapped from numbers to original names
+cond_probs_long$Variable <- factor(cond_probs_long$Variable,
+                                   levels = c("1", "2", "3", "4", "5", "6", "7"),
+                                   labels = c("C3_1", "C3_2", "C3_3", "C3_4", "C3_5", "C4", "C5"))
+
+# Check unique values after mapping to original names
+print(unique(cond_probs_long$Variable))
+
+# To ensure the correct levels exist
+print(levels(cond_probs_long$Variable))
+
+# Now rename the variables to their descriptive names
+cond_probs_long$Variable <- factor(cond_probs_long$Variable, 
+                                   levels = c("C3_1", "C3_2", "C3_3", "C3_4", "C3_5", "C4", "C5"),
+                                   labels = c("Confidence in vaccine (inv)", 
+                                              "Low complacency", 
+                                              "Convenience (inv)", 
+                                              "Calculation", 
+                                              "Collective responsibility", 
+                                              "Social conformism", 
+                                              "Confidence in system"))
+
+# Final check to ensure renaming was successful
+print(unique(cond_probs_long$Variable))
+
+# Print the first rows to check structure
+print(head(cond_probs_long))
+
+
+# Plot stacked bar chart
+
+ggplot(cond_probs_long, aes(x = Variable, y = Probability, fill = factor(Response))) +
+  geom_bar(stat = "identity", position = "stack") +  # Ensure stacking is applied
+  facet_wrap(~ Class, ncol = 1, strip.position = "right") +  # Keep facet by Class
+  scale_fill_manual(
+    values = c(
+      "1" = "#B5420C",  
+      "2" = "#E8A95D",  
+      "3" = "#D2CFBD",  
+      "4" = "#85A5D6",  
+      "5" = "#3440AF"   
+    ),
+    labels = c(
+      "1" = "Completely disagree / Very skeptical",
+      "2" = "Disagree / Rather skeptical",
+      "3" = "Neither disagree nor agree / Equally skeptical and favourable",
+      "4" = "Agree / Rather favourable",
+      "5" = "Completely agree / Very favourable"
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),  # Larger facet (Class) labels
+    legend.title = element_text(size = 12),
+    legend.position = "bottom",  # Move legend below the plot
+    legend.key.size = unit(1.2, "cm"),  # Increase legend size for readability
+    axis.title.x = element_text(size = 14, face = "bold"),  
+    axis.title.y = element_text(size = 14, face = "bold"),  
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  # Angled for better readability
+    panel.spacing = unit(2, "lines"),  # Space between stacked bars
+    panel.background = element_rect(fill = "white", color = NA),  # White background
+    plot.background = element_rect(fill = "white", color = NA)    # White plot background
+  ) +
+  labs(
+    x = "7C Variables",
+    y = "Conditional Probabilities",
+    fill = "Response",
+    title = "Conditional Probabilities for Each Class Membership"
+  ) +
+  guides(fill = guide_legend(nrow = 2))  # Format legend to be more compact
+
+# Save graph
+ggsave("LCA graph.png", width = 26, height = 20, dpi = 300, bg = "white")
+
+```
+
+### 2.6. VLMR test
+
+```{r Vuong-Lo-Mendell-Rubin (VLMR) test, echo=FALSE}
+
+# Function to perform the VLMR test
+vlmr_test <- function(model_k, model_k_minus_1, k) {
+
+# Extract log-likelihood values
+  ll_k <- model_k$llik    
+  ll_km1 <- model_k_minus_1$llik  
+
+# Extract degrees of freedom (df)
+  df_k <- model_k$resid.df  
+  df_km1 <- model_k_minus_1$resid.df  
+
+# Ensure degrees of freedom are valid
+  if (is.null(df_k) || is.null(df_km1)) {
+    print("Skipping due to missing degrees of freedom.")
+    return(NULL)
+  }
+
+  df_diff <- df_km1 - df_k  # df of k-1 should be greater than df of k
+
+  if (df_diff <= 0) {  
+    print("Warning: df_diff is non-positive. Skipping comparison.")
+    return(NULL)
+  }
+
+# Compute Likelihood Ratio Test (LRT) statistic
+  LRT_stat <- 2 * (ll_k - ll_km1)  
+  p_value <- pchisq(LRT_stat, df = df_diff, lower.tail = FALSE)  
+
+# Return the results in a data frame
+  return(data.frame(
+    Classes_Compared = paste(k - 1, "vs", k),
+    LRT_Statistic = LRT_stat,
+    df = df_diff,
+    p_value = p_value
+  ))
+}
+
+# Perform VLMR test for models k = 3 to 7
+vlmr_results <- list()
+
+for (k in 3:7) {
+  model_k <- models[[k]]          
+  model_k_minus_1 <- models[[k-1]] 
+
+  result <- vlmr_test(model_k, model_k_minus_1, k)
+  if (!is.null(result)) {
+    vlmr_results[[length(vlmr_results) + 1]] <- result
+  }
+}
+
+# Combine results into a data frame
+vlmr_results_df <- do.call(rbind, vlmr_results)
+
+# Print results
+print(vlmr_results_df)
+
+for (k in 2:7) {
+  print(paste("k =", k, "resid.df =", models[[k]]$resid.df))
+}
+
+# Table
+
+# Create a data frame
+vlmr_results_df <- data.frame(
+  Classes_Compared = c("2 vs 3", "3 vs 4", "4 vs 5", "5 vs 6", "6 vs 7"),
+  LRT_Statistic = c(2233.18682, 581.29245, 445.11806, 278.28801, 231.11060), 
+  df = rep(29, 5),  # Since df is always 29
+  p_value = c(0, 4.858291e-104, 4.988020e-76, 1.540944e-42, 2.252011e-33)
+)
+
+# Styled Table with gt
+vlmr_results_df %>%
+  gt() %>%
+  tab_header(
+    title = "VLMR Test Results"
+  ) %>%
+  fmt_number(columns = LRT_Statistic, decimals = 5) %>%  # Keep LRT values rounded
+  fmt_scientific(columns = p_value, decimals = 2) %>%   # Use scientific notation for p-values
+  cols_label(
+    Classes_Compared = "Comparison",
+    LRT_Statistic = "LRT Statistic",
+    df = "Degrees of Freedom",
+    p_value = "p-value"
+  )
+
+```
+
+### 2.7. Binary class membership dataset
+
+```{r Binary class membership dataset, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# The posterior probabilities previously obtained (rows: participants, cols: classes)
+posterior_probs <- best_model$posterior
+
+# Function to assign 1 to the max class, 0 to others
+assign_class <- function(probs_row) {
+  max_val <- max(probs_row, na.rm = TRUE)
+  max_classes <- which(probs_row == max_val)
+  
+# Assign randomly if more than one max
+  chosen_class <- if (length(max_classes) > 1) {
+    sample(max_classes, 1)
+  } else {
+    max_classes
+  }
+  
+  binary_row <- rep(0, length(probs_row))
+  binary_row[chosen_class] <- 1
+  return(binary_row)
+}
+
+# Apply function row-wise to posterior matrix
+binary_class_matrix <- t(apply(posterior_probs, 1, assign_class))
+
+# Convert to data frame and add column names
+colnames(binary_class_matrix) <- paste0("Class_", 1:ncol(binary_class_matrix))
+prob_class <- as.data.frame(binary_class_matrix)
+
+```
+
+prob_class is the data frame of the Discovery dataset having only the class assignment and the ID check for each observation.
+
+### 2.8. Distance to Next-Best Class
+
+```{r Distance to Next-Best Class, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Function to calculate the confidence gap
+calculate_confidence_gap <- function(probs_row) {
+  
+  # Sort the probabilities in descending order
+  sorted_probs <- sort(probs_row, decreasing = TRUE)
+  
+  # Calculate the gap between the highest and second-highest probability
+  confidence_gap <- sorted_probs[1] - sorted_probs[2]
+  
+  return(confidence_gap)
+}
+
+# Apply the function row-wise to the posterior probabilities matrix
+confidence_gaps <- apply(posterior_probs, 1, calculate_confidence_gap)
+
+# Add the confidence gap as a new column to the binary_class_matrix data frame
+prob_class$Confidence_Gap <- confidence_gaps
+
+# View the first few rows of the updated data frame
+head(prob_class)
+
+
+## Table by class
+
+# Add the assigned class for each individual
+prob_class$Assigned_Class <- apply(binary_class_matrix, 1, function(row) which(row == 1))
+
+# Group by the assigned class and calculate statistics
+class_summary <- prob_class %>%
+  group_by(Assigned_Class) %>%
+  summarise(
+    Count = n(),
+    Percentage = (n() / nrow(prob_class)) * 100,
+    Mean_Confidence_Gap = mean(Confidence_Gap, na.rm = TRUE),
+    Median_Confidence_Gap = median(Confidence_Gap, na.rm = TRUE),
+    SD_Confidence_Gap = sd(Confidence_Gap, na.rm = TRUE)
+  )
+
+# Format the Percentage column to one decimal place
+class_summary <- class_summary %>%
+  mutate(Percentage = round(Percentage, 1))
+
+# Print the summary table
+print(class_summary)
+
+## Boxplot Plot by class
+
+boxplot_by_class <- ggplot(prob_class, aes(x = factor(Assigned_Class), y = Confidence_Gap)) +
+  geom_boxplot(fill = "#E8A95D", color = "black", alpha = 0.7) +
+  labs(
+    title = "Confidence Gaps by Assigned Class",
+    x = "Assigned Class",
+    y = "Confidence Gap"
+  ) +
+  theme_minimal()
+
+ggsave(
+  filename = "Boxplot_By_Class.png", 
+  plot = boxplot_by_class,          
+  width = 10,                       
+  height = 6,                       
+  dpi = 300,                        
+  bg = "white"                      
+)
+
+
+## Summary based on 0.1 threshold
+
+# Subset data based on the new threshold
+ambiguous <- prob_class %>% filter(Confidence_Gap < 0.1)
+confident <- prob_class %>% filter(Confidence_Gap >= 0.1)
+
+# Summary statistics for both groups
+
+summary_ambiguous <- ambiguous %>%
+  group_by(Assigned_Class) %>%
+  summarise(
+    N_Ambiguous = n(),
+    Percent_Ambiguous = (n() / nrow(ambiguous)) * 100,
+    Mean_Gap_Ambiguous = mean(Confidence_Gap),
+    Median_Gap_Ambiguous = median(Confidence_Gap),
+    SD_Gap_Ambiguous = sd(Confidence_Gap)
+  )
+
+# Summarize confident group
+summary_confident <- confident %>%
+  group_by(Assigned_Class) %>%
+  summarise(
+    N_Confident = n(),
+    Percent_Confident = (n() / nrow(confident)) * 100,
+    Mean_Gap_Confident = mean(Confidence_Gap),
+    Median_Gap_Confident = median(Confidence_Gap),
+    SDe_Gap_Confident = sd(Confidence_Gap)
+  )
+
+# Combine the summaries for side-by-side comparison
+summary_combined <- full_join(summary_ambiguous, summary_confident, by = "Assigned_Class")
+
+# Print the formatted table
+
+kable(
+  summary_combined,
+  caption = "Summary of Ambiguous and Confident Groups by Class (Threshold 0.1)"
+)
+
+write_xlsx(summary_combined, path = "Ambiguous_Confident_Groups_Class_0.1.xlsx")
+
+
+# Create the boxplot for 0.1 threshold
+
+# Add a grouping column to indicate ambiguous or confident
+prob_class$Group <- ifelse(prob_class$Confidence_Gap < 0.1, "Ambiguous", "Confident")
+
+# Convert Assigned_Class to a factor for proper ordering in the plot
+prob_class$Assigned_Class <- factor(prob_class$Assigned_Class)
+
+# Create the boxplot
+boxplot_threshold_0.1 <- ggplot(prob_class, aes(x = Assigned_Class, y = Confidence_Gap, fill = Group)) +
+  geom_boxplot(alpha = 0.7, outlier.color = "#B5420C", outlier.size = 1) +
+  labs(
+    title = "Confidence Gaps by Class for Ambiguous and Confident Groups (Threshold 0.1)",
+    x = "Assigned Class",
+    y = "Confidence Gap"
+  ) +
+  scale_fill_manual(values = c("Ambiguous" = "#E8A95D", "Confident" = "#3440AF")) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+    plot.title = element_text(size = 24, face = "bold"),      
+    axis.title.x = element_text(size = 20, face = "bold"),    
+    axis.title.y = element_text(size = 20, face = "bold"),    
+    axis.text.x = element_text(size = 16),                    
+    axis.text.y = element_text(size = 16),                    
+    legend.text = element_text(size = 16)                     
+  )
+
+# Save the boxplot as a PNG file
+ggsave(
+  filename = "Boxplot_treshold0.1.png",
+  plot = boxplot_threshold_0.1,
+  width = 24,  
+  height = 18, 
+  dpi = 300,   
+  bg = "white")
+
+```
+
+Note:
+
+Larger Confidence Gap: Indicates higher certainty in the class assignment.
+Smaller Confidence Gap: Indicates ambiguity, as the next-best class has a probability close to the assigned class.
+
+## 3. REGRESSION ANALYSIS
+
+### 3.1. Regression dataset from LCA
+
+```{r Full dataset for regression, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Define the LCA variables
+lca_vars <- c("C3_1", "C3_2", "C3_3", "C3_4", "C3_5", "C4", "C5")
+
+# Get the IDs of rows with complete LCA data
+lca_ids <- cases_discovery %>%
+  filter(complete.cases(across(all_of(lca_vars)))) %>%
+  pull(IDIPSOS)
+
+# Add ID variable to prob_class
+
+prob_class <- prob_class %>%
+  mutate(ID_check = cases_discovery$IDIPSOS)
+
+# Filter prob_class to only those with complete LCA data
+prob_class <- prob_class %>%
+  filter(ID_check %in% lca_ids)
+
+# Merge
+
+regression <- prob_class %>%
+  left_join(
+    cases_discovery %>%
+      select(IDIPSOS, Sex, Age, Comorbidities, Region, Professions, 
+    Education, Country_of_birth, Sanitary_pass, Uptake_speed),
+    by = c("ID_check" = "IDIPSOS")
+  )
+
+str(regression)
+```
+
+Note:When fitting a Latent Class Analysis (LCA) model using poLCA, each participant is not assigned definitively to a class. Instead, the model estimates the probability that a participant belongs to each latent class based on their answers to the manifest variables. These probabilities of each participant belonging to each class are called *posterior probabilities*, formed as a matrix that allows us to obtain the binary results for each participant according to each class.
+
+In this case, the code generates the *posterior probabilities*, so each participant is assigned to only one class, based on the highest posterior probability.
+
+-   If there’s a tie between multiple classes, one is chosen randomly.
+-   The result is a binary matrix (1 for assigned class, 0 elsewhere), with one row per participant and one column per class.
+
+### 3.2. Recoding Classes
+
+```{r Recode/Transform, echo=FALSE, warning=FALSE, message=FALSE}
+
+regression <- regression %>%
+  mutate(across(starts_with("Class_"), 
+                ~ factor(.x, levels = c(0, 1), labels = c("No", "Yes")) %>% droplevels()))
+
+str(regression)
+
+```
+
+### 3.3. Class descriptive statistics for regression
+
+```{r Logit Regression, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+class_columns <- paste0("Class_", 1:7)
+class_vars <- c("Sex", "Age", "Comorbidities", "Region", "Professions", 
+                "Education", "Country_of_birth", "Sanitary_pass")
+
+# Create table:
+summary_class <- map_dfr(class_columns, function(class_col) {
+  map_dfr(class_vars, function(var) {
+    regression %>%
+      filter(.data[[class_col]] == "Yes") %>%
+      count(Level = .data[[var]]) %>%
+      mutate(Variable = var,
+             Class = class_col,
+             Perc = round(100 * n / sum(n), 1),
+             Count_Perc = paste(n, "(", Perc, "%)", sep = "")) %>%
+      select(Variable, Level, Class, Count_Perc) 
+  })
+}) %>%
+  pivot_wider(names_from = Class, values_from = Count_Perc, values_fill = "0") %>%
+  relocate(Variable, Level)
+
+# Calculate the total number of cases per class
+class_totals <- map_dfr(class_columns, function(class_col) {
+  regression %>%
+    filter(.data[[class_col]] == "Yes") %>%
+    summarise(Total = n()) %>%
+    mutate(Variable = "Total", Level = "All", Class = class_col) %>%
+    select(Variable, Level, Class, Total)
+})
+
+class_totals <- class_totals %>%
+  pivot_wider(names_from = Class, values_from = Total, values_fill = list(Total = 0)) %>%
+  mutate(Variable = "Total", Level = "All") %>%
+  relocate(Variable, Level)
+
+# Calculate percentages for the totals
+class_totals <- class_totals %>%
+  mutate(
+    total_sum = rowSums(select(., starts_with("Class_")), na.rm = TRUE),  # Total across all classes
+    across(
+      starts_with("Class_"),
+      ~ sprintf("%d (%.1f%%)", .x, 100 * .x / total_sum)
+    )
+  ) %>%
+  relocate(Variable, Level)
+
+# Ensure class columns are characters
+class_totals <- class_totals %>%
+  mutate(across(starts_with("Class_"), as.character))
+
+# Combine with main summary table
+summary_class_tb <- bind_rows(summary_class, class_totals) %>%
+  arrange(Variable, Level)
+
+# Display final table
+knitr::kable(summary_class_tb)
+
+# Save to Excel
+write_xlsx(summary_class_tb, path = "summary_class.xlsx")
+
+```
+
+#"UP TO DATE VACCINATION"
+
+### 3.4. Unadjusted Logistic regression
+
+```{r Logit Regression, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Logistic regression for Sanitary_pass
+
+mdl_Sanitary_pass <- glm(Sanitary_pass ~  Class_2 + Class_3 + Class_4 + Class_5 + Class_6 + Class_7,
+                  data = regression,
+                  family = binomial)
+
+summary(mdl_Sanitary_pass)
+exp(cbind(Odds_Ratio = coef(mdl_Sanitary_pass), confint(mdl_Sanitary_pass)))
+
+tab_model(mdl_Sanitary_pass)
+# tbl_regression(mdl_Sanitary_pass)
+```
+
+NOTE: class 5 is the reference since it is the class with larger prevalence and the most pro-vaccine
+
+### 3.5. Mixed-effects methods logistic regression
+
+```{r Mixed effects Regression, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Nested model
+
+nested_mix_mdl_Sanitary_pass <- glm(
+  Sanitary_pass ~ Class_2 + Class_3 + Class_4 + Class_5 + Class_6 + Class_7 +
+    Sex + Age + Professions + Education + Country_of_birth + Comorbidities,
+  data = regression,
+  family = binomial 
+)
+
+summary(nested_mix_mdl_Sanitary_pass)
+tab_model(nested_mix_mdl_Sanitary_pass)
+# tbl_regression(nested_mix_mdl_Sanitary_pass)
+
+
+# Mixed effects logistic regression for Sanitary Pass
+mix_mdl_Sanitary_pass <- glmer(
+  Sanitary_pass ~ Class_2 + Class_3 + Class_4 + Class_5 + Class_6 + Class_7 +
+    Sex + Age + Professions + Education + Country_of_birth + Comorbidities + 
+    (1 | Region),  # Included as random effect
+  data = regression,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+summary(mix_mdl_Sanitary_pass)
+tab_model(mix_mdl_Sanitary_pass)
+# tbl_regression(mix_mdl_Sanitary_pass)
+
+```
+
+NOTE: class 1 is the reference since it is the class with larger prevalence and the most pro-vaccine
+
+#### 3.5.1. Model's Hessian condition number and multicollinearity
+
+```{r Mixed effects condition number of the Hessian, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Extract the deviance function
+devfun <- update(mix_mdl_Sanitary_pass, devFunOnly = TRUE)
+
+# Extract the fixed effects (fixed coefficients)
+fixef_params <- fixef(mix_mdl_Sanitary_pass)
+
+# Extract standard deviations for random effects
+random_effects_params <- getME(mix_mdl_Sanitary_pass, "theta")
+
+# Combine both sets of parameters
+optpar <- c(fixef_params, random_effects_params)
+
+# Calculate the Hessian matrix numerically
+hess <- hessian(devfun, optpar)
+
+# Calculate the condition number (max eigenvalue / min eigenvalue)
+eigen_vals <- eigen(hess, symmetric = TRUE)$values
+cond_number_hessian <- max(abs(eigen_vals)) / min(abs(eigen_vals))
+
+# Hessian condition number
+print(cond_number_hessian)
+
+# Calculate GVIF for the fixed effects of the mixed model
+vif(mix_mdl_Sanitary_pass)
+
+```
+
+#### 3.5.2. Conditional modes
+
+```{r Conditional modes, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Conditional modes (random intercepts)
+
+ranef(mix_mdl_Sanitary_pass)
+
+# Visualising the Conditional modes:
+
+# Extract random intercepts (conditional modes) for each region
+random_intercepts <- ranef(mix_mdl_Sanitary_pass)$Region
+
+# Extract variance-covariance matrix for random effects (Region)
+vcov_random <- VarCorr(mix_mdl_Sanitary_pass)$Region
+
+# Convert to numeric vector for standard error calculation
+vcov_random_numeric <- as.numeric(vcov_random)
+
+# Standard error for random intercepts (sqrt of the variance)
+se_random_intercepts <- sqrt(vcov_random_numeric)
+
+# Combine the random intercepts and standard errors into a data frame
+random_intercepts_df <- data.frame(
+  Region = rownames(random_intercepts),
+  Intercept = random_intercepts[, 1],
+  SE = se_random_intercepts
+)
+
+# Calculate confidence intervals (95% CI)
+random_intercepts_df$CI_lower <- random_intercepts_df$Intercept - 1.96 * random_intercepts_df$SE
+random_intercepts_df$CI_upper <- random_intercepts_df$Intercept + 1.96 * random_intercepts_df$SE
+
+
+print(random_intercepts_df[, c("Region", "CI_lower", "CI_upper")])
+
+
+# Full Table of the random intercepts (conditional modes) and their confidence intervals
+
+random_intercepts_df <- data.frame(
+  Region = rownames(random_intercepts),
+  Random_intercept = random_intercepts[, 1],
+  SE = se_random_intercepts,
+  CI_lower = random_intercepts[, 1] - 1.96 * se_random_intercepts,
+  CI_upper = random_intercepts[, 1] + 1.96 * se_random_intercepts
+)
+
+print(random_intercepts_df)
+
+str(random_intercepts_df)
+
+# Caterpillar plot with random intercepts
+
+cond_plot <- ggplot(random_intercepts_df, aes(x = reorder(Region, Random_intercept), y = Random_intercept)) +
+  geom_point(size = 3, color = "#3440AF") +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, color = "black") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10), 
+    axis.ticks.x = element_line(size = 0.5),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10)
+  ) +
+  labs(
+    title = "Effect of Region on Sanitary Pass via Conditional Modes",
+    x = "Regions",
+    y = "Effect of region of residence"
+  )
+
+ggsave("Conditional_modes_graph.png", plot = cond_plot, width = 10, height = 6, dpi = 700, bg = "white")
+
+```
+
+### 3.6. Comparing models
+
+```{r Comparing models, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Comparing nested and mixed effects models
+
+lrtest(nested_mix_mdl_Sanitary_pass, mix_mdl_Sanitary_pass)
+
+## AIC
+AIC(nested_mix_mdl_Sanitary_pass, mix_mdl_Sanitary_pass)
+
+## BIC
+BIC(nested_mix_mdl_Sanitary_pass, mix_mdl_Sanitary_pass)
+
+```
+
+
+#"UPTAKE SPEED"
+
+### 3.7. Unadjusted Logistic regression
+
+```{r Unadjusted Regression, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Logistic regression for Uptake_speed    
+mdl_Uptake_speed <- glm(Uptake_speed ~  Class_2 + Class_3 + Class_4 + Class_5 + Class_6 + Class_7,
+                  data = regression,
+                  family = binomial)
+
+summary(mdl_Uptake_speed)
+exp(cbind(Odds_Ratio = coef(mdl_Uptake_speed), confint(mdl_Uptake_speed)))
+
+tab_model(mdl_Uptake_speed)
+levels(regression$Uptake_speed)
+```
+
+Note: Reference category is "Not_delayed", therefore a positive coefficient means higher odds of being Delayed (vs. Not_delayed) and a negative coefficient means lower odds of being Delayed (vs. Not_delayed).
+
+### 3.8. Mixed-effects methods logistic regression
+
+```{r Mixed effects Regression uptake, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Nested model
+
+nested_mix_mdl_Uptake_speed <- glm(
+  Uptake_speed ~ Class_2 + Class_3 + Class_4 + Class_5 + Class_6 + Class_7 +
+    Sex + Age + Professions + Education + Country_of_birth + Comorbidities,
+  data = regression,
+  family = binomial 
+)
+
+summary(nested_mix_mdl_Uptake_speed)
+tab_model(nested_mix_mdl_Uptake_speed)
+
+
+# Mixed effects logistic regression for Sanitary Pass
+mix_mdl_Uptake_speed <- glmer(
+  Uptake_speed ~ Class_2 + Class_3 + Class_4 + Class_5 + Class_6 + Class_7 +
+    Sex + Age + Professions + Education + Country_of_birth + Comorbidities + 
+    (1 | Region),  # Included as random effect
+  data = regression,
+  family = binomial,
+  control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
+)
+
+summary(mix_mdl_Uptake_speed)
+tab_model(mix_mdl_Uptake_speed)
+```
+
+#### 3.8.1. Model's Hessian condition number and multicollinearity
+
+```{r Mixed effects condition number of the Hessian, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Extract the deviance function (for Hessian calculation)
+devfun <- update(mix_mdl_Uptake_speed, devFunOnly = TRUE)
+
+# Extract fixed effect parameters
+fixef_params <- fixef(mix_mdl_Uptake_speed)
+
+# Extract random effects standard deviation parameters (theta)
+random_effects_params <- getME(mix_mdl_Uptake_speed, "theta")
+
+# Combine fixed and random parameters into one vector
+optpar <- c(fixef_params, random_effects_params)
+
+# Compute Hessian matrix numerically
+hess <- hessian(devfun, optpar)
+
+# Compute condition number of Hessian
+eigen_vals <- eigen(hess, symmetric = TRUE)$values
+cond_number_hessian <- max(abs(eigen_vals)) / min(abs(eigen_vals))
+
+# Print condition number
+print(cond_number_hessian)
+
+# Check multicollinearity (GVIF) for fixed effects
+vif_result <- vif(mix_mdl_Uptake_speed)
+print(vif_result)
+
+```
+
+#### 3.8.2. Conditional modes
+
+```{r Conditional modes, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Extract conditional modes (random intercepts) for each region
+random_intercepts <- ranef(mix_mdl_Uptake_speed)$Region
+
+# Extract variance-covariance matrix for random effects (Region)
+vcov_random <- VarCorr(mix_mdl_Uptake_speed)$Region
+
+# Convert to numeric to extract the variance
+vcov_random_numeric <- as.numeric(vcov_random)
+
+# Standard error = sqrt(variance)
+se_random_intercepts <- sqrt(vcov_random_numeric)
+
+# Create dataframe with Region, Intercept, SE, CI
+random_intercepts_df <- data.frame(
+  Region = rownames(random_intercepts),
+  Random_intercept = random_intercepts[, 1],
+  SE = se_random_intercepts,
+  CI_lower = random_intercepts[, 1] - 1.96 * se_random_intercepts,
+  CI_upper = random_intercepts[, 1] + 1.96 * se_random_intercepts
+)
+
+# Print CI table
+print(random_intercepts_df[, c("Region", "CI_lower", "CI_upper")])
+str(random_intercepts_df)
+
+# Plot conditional modes: caterpillar plot
+cond_plot <- ggplot(random_intercepts_df, aes(x = reorder(Region, Random_intercept), y = Random_intercept)) +
+  geom_point(size = 3, color = "#2C77B3") +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, color = "black") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10), 
+    axis.ticks.x = element_line(size = 0.5),
+    axis.title.x = element_text(size = 10),
+    axis.title.y = element_text(size = 10)
+  ) +
+  labs(
+    title = "Effect of Region on Uptake Speed via Conditional Modes",
+    x = "Region",
+    y = "Random Intercept (Region Effect)"
+  )
+
+# Save plot
+ggsave("Conditional_modes_Uptake_speed.png", plot = cond_plot, width = 10, height = 6, dpi = 700, bg = "white")
+
+```
+
+### 3.9. Comparing models
+
+```{r Comparing models, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Comparing nested and mixed effects models
+
+lrtest(nested_mix_mdl_Uptake_speed, mix_mdl_Uptake_speed)
+
+## AIC
+AIC(nested_mix_mdl_Uptake_speed, mix_mdl_Uptake_speed)
+
+## BIC
+BIC(nested_mix_mdl_Uptake_speed, mix_mdl_Uptake_speed)
+
+```
+
+
+# "CASES VALIDATION DATASET"
+
+## 4. PREDICTION - CASES VALIDATION
+
+### 4.1. Setting up data for validation dataset 
+
+```{r Validation dataset, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Compute Posterior Probabilities
+
+manifest_vars <- c("C3_1", "C3_2", "C3_3", "C3_4", "C3_5", "C4", "C5")
+validation_post_probs <- poLCA.posterior(
+  best_model,
+  cases_validation[, manifest_vars, drop = FALSE]
+)
+
+# Assign to the Most Likely Class
+
+assign_class <- function(probs_row) {
+  max_val <- max(probs_row, na.rm = TRUE)
+  max_classes <- which(probs_row == max_val)
+  chosen_class <- if (length(max_classes) > 1) sample(max_classes, 1) else max_classes
+  binary_row <- rep(0, length(probs_row))
+  binary_row[chosen_class] <- 1
+  return(binary_row)
+}
+
+class_cases_validation <- t(apply(validation_post_probs, 1, assign_class))
+colnames(class_cases_validation) <- paste0("Class_", 1:ncol(class_cases_validation))
+prob_class_val <- as.data.frame(class_cases_validation)
+prob_class_val$ID_check <- cases_validation$IDIPSOS
+
+# Join class assignment with original validation dataset
+
+regression_val <- prob_class_val %>%
+  left_join(cases_validation, by = c("ID_check" = "IDIPSOS")) %>%
+  
+  # Convert Class_1 to Class_7 to labeled binary factors
+  mutate(across(starts_with("Class_"),
+                ~ factor(.x, levels = c(0, 1), labels = c("No", "Yes"))))
+
+str(regression_val)
+
+# Clean dataset
+
+# CCA of predictive variables 
+
+vars_predictors <- c("Class_1", "Class_2", "Class_3", "Class_4", "Class_5", "Class_6", "Class_7",
+                     "Sex", "Age", "Professions", "Education", 
+                     "Country_of_birth", "Comorbidities", "Region")
+
+regression_val_clean <- regression_val[complete.cases(regression_val[, vars_predictors]), ]
+
+```
+
+NOTE: regression_val is the data.frame of the validation data set having only the class assignment and the ID check for each observation; regression_val_clean is the final dataset that has CCA.
+
+## "MIXED EFFECTS METHODS REGRESSION"
+
+### 4.2. "Up to date" predicted probabilities
+
+```{r Predict validation set, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+regression_val_clean$pred_prob <- predict(mix_mdl_Sanitary_pass,
+                                         newdata = regression_val_clean,
+                                         type = "response",
+                                         allow.new.levels = TRUE)
+```
+
+Note: regression_val_clean is the final data used for prediction which has CCA for predictor variables
+
+### 4.3. "Up to date" Youden's Index for optimal threshold, MCC and AUC-ROC
+
+```{r Youden's Index mixed effects model, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# 1. Compute ROC and optimal threshold (Youden's Index)
+roc_obj <- roc(
+  regression_val_clean$Sanitary_pass,
+  regression_val_clean$pred_prob,
+  levels = c("Not up to date", "Up to date"),
+  direction = "<"
+)
+youden_coords <- coords(roc_obj, "best", best.method = "youden", ret = c("threshold", "sensitivity", "specificity"))
+youden_threshold <- as.numeric(youden_coords["threshold"])
+cat("Youden's optimal threshold:", youden_threshold, "\n")
+
+# 2. Apply threshold to predicted probabilities
+regression_val_clean$pred_class <- ifelse(regression_val_clean$pred_prob >= youden_threshold, "Up to date", "Not up to date")
+regression_val_clean$pred_class <- factor(regression_val_clean$pred_class, levels = c("Not up to date", "Up to date"))
+
+# 3. Confusion matrix, sensitivity, specificity
+conf <- confusionMatrix(regression_val_clean$pred_class, regression_val_clean$Sanitary_pass, positive = "Up to date")
+print(conf)
+
+# 4. Matthews Correlation Coefficient (MCC)
+regression_val_clean$Sanitary_pass_bin <- ifelse(regression_val_clean$Sanitary_pass == "Up to date", 1, 0)
+regression_val_clean$pred_class_bin <- ifelse(regression_val_clean$pred_class == "Up to date", 1, 0)
+mcc_val <- mltools::mcc(
+  preds = regression_val_clean$pred_class_bin,
+  actuals = regression_val_clean$Sanitary_pass_bin
+)
+cat("Matthews Correlation Coefficient (MCC):", mcc_val, "\n")
+
+# 5. AUC-ROC
+auc_val <- auc(roc_obj)
+cat("AUC-ROC:", auc_val, "\n")
+
+```
+
+#### 4.3.1. AUC-ROC Plot
+
+```{r AUC-ROC Plot Mixed effects, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Open PNG device for saving plot (adjust path/filename as needed)
+png("X:/Camila/7C_LCA/roc_curve_mixed_effects_up_to_date.png", width = 800, height = 600, res = 120)
+
+# Plot ROC curve
+plot(roc_obj, col= "#3440AF", lwd=2, legacy.axes=TRUE, main="ROC Curve - Up to date vaccination")
+
+# Find Youden's associated sensitivity and specificity
+youden_sens <- as.numeric(youden_coords["sensitivity"])
+youden_spec <- as.numeric(youden_coords["specificity"])
+
+# Coordinates for Youden's Index point on ROC curve
+x_youden <- 1 - youden_spec  # x-axis is 1 - specificity
+y_youden <- youden_sens      # y-axis is sensitivity
+
+# Add vertical dashed line at Youden's Index (specificity)
+abline(v = x_youden, col = "#B5420C", lwd = 2, lty = 3)
+
+# Add marker point at Youden's Index
+points(x_youden, y_youden, col= "#B5420C", pch=19, cex=1.5)
+
+# Add text label next to marker
+text(x_youden, y_youden, labels = "Youden", pos=4, col= "#B5420C", cex=0.9)
+
+# Add legend showing AUC and Youden's threshold
+legend("bottomright", legend = c(
+  paste("AUC =", round(auc(roc_obj), 3)),
+  paste("Youden's Index threshold =", round(youden_threshold, 3))
+), bty="n")
+
+# Close the PNG device
+dev.off()
+
+```
+
+### 4.4. "Uptake speed" predicted probabilities mixed-methods
+
+```{r Predict validation set uptake speed, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+regression_val_clean$pred_prob2 <- predict(mix_mdl_Uptake_speed,
+                                         newdata = regression_val_clean,
+                                         type = "response",
+                                         allow.new.levels = TRUE)
+```
+
+### 4.5. "Uptake speed" Youden's Index for optimal threshold, MCC and AUC-ROC
+
+```{r Youden's Index mixed effects model uptake, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# 1. Compute ROC curve for Uptake_speed prediction
+roc_obj_speed <- roc(
+  regression_val_clean$Uptake_speed,
+  regression_val_clean$pred_prob2,
+  levels = c("Not_delayed", "Delayed"),
+  direction = "<"
+)
+
+# Find optimal threshold using Youden's Index
+youden_coords_speed <- coords(
+  roc_obj_speed,
+  "best",
+  best.method = "youden",
+  ret = c("threshold", "sensitivity", "specificity")
+)
+youden_threshold_speed <- as.numeric(youden_coords_speed["threshold"])
+cat("Youden's optimal threshold (Uptake speed):", youden_threshold_speed, "\n")
+
+# 2. Classify based on predicted probability and Youden's threshold
+regression_val_clean$pred_class_speed <- ifelse(
+  regression_val_clean$pred_prob2 >= youden_threshold_speed,
+  "Delayed", "Not_delayed"
+)
+
+# Convert to factor with correct order
+regression_val_clean$pred_class_speed <- factor(
+  regression_val_clean$pred_class_speed,
+  levels = c("Not_delayed", "Delayed")
+)
+
+# 3. Confusion matrix, sensitivity, specificity
+conf_speed <- confusionMatrix(
+  regression_val_clean$pred_class_speed,
+  regression_val_clean$Uptake_speed,
+  positive = "Delayed"
+)
+print(conf_speed)
+
+# 4. Matthews Correlation Coefficient (MCC)
+
+regression_val_clean$Uptake_speed_bin <- ifelse(regression_val_clean$Uptake_speed == "Delayed", 1, 0)
+regression_val_clean$pred_class_speed_bin <- ifelse(regression_val_clean$pred_class_speed == "Delayed", 1, 0)
+
+# Calculate MCC
+mcc_val_speed <- mltools::mcc(
+  preds = regression_val_clean$pred_class_speed_bin,
+  actuals = regression_val_clean$Uptake_speed_bin
+)
+cat("Matthews Correlation Coefficient (MCC):", mcc_val_speed, "\n")
+
+# 5. AUC-ROC
+auc_val_speed <- auc(roc_obj_speed)
+cat("AUC-ROC (Uptake speed):", auc_val_speed, "\n")
+
+```
+
+#### 4.5.1. AUC-ROC Plot
+
+```{r AUC-ROC Plot Mixed effects, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Save ROC curve to PNG
+png("X:/Camila/7C_LCA/roc_curve_mixed_effects_uptake_speed.png", width = 800, height = 600, res = 120)
+
+# Plot ROC
+plot(roc_obj_speed, col= "#3440AF", lwd=2, legacy.axes=TRUE, main="ROC Curve - Uptake Speed")
+
+# Extract sensitivity & specificity
+youden_sens_speed <- as.numeric(youden_coords_speed["sensitivity"])
+youden_spec_speed <- as.numeric(youden_coords_speed["specificity"])
+
+# Coordinates for Youden's point
+x_youden_speed <- 1 - youden_spec_speed
+y_youden_speed <- youden_sens_speed
+
+# Add vertical line and marker
+abline(v = x_youden_speed, col = "#B5420C", lwd = 2, lty = 3)
+points(x_youden_speed, y_youden_speed, col= "#B5420C", pch=19, cex=1.5)
+text(x_youden_speed, y_youden_speed, labels = "Youden", pos=4, col= "#B5420C", cex=0.9)
+
+# Add legend
+legend("bottomright", legend = c(
+  paste("AUC =", round(auc_val_speed, 3)),
+  paste("Youden's Index threshold =", round(youden_threshold_speed, 3))
+), bty = "n")
+
+# Close device
+dev.off()
+
+```
+
+
+## "UNADJUSTED REGRESSION MODEL"
+
+### 4.6. "Up to date" - Predict probabilities
+
+```{r Predict validation set Up to date, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+regression_val_clean$pred_prob3 <- predict(mdl_Sanitary_pass,
+                                           newdata = regression_val_clean,
+                                           type = "response")
+```
+
+### 4.7."Up to date" - Youden's Index for optimal threshold, MCC and AUC-ROC
+
+```{r Youden's Index for unadjusted model - Up to date, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# 1. Compute ROC and optimal threshold (Youden's Index)
+roc_obj3 <- roc(
+  regression_val_clean$Sanitary_pass,
+  regression_val_clean$pred_prob3,
+  levels = c("Not up to date", "Up to date"),
+  direction = "<"
+)
+youden_coords3 <- coords(roc_obj3, "best", best.method = "youden", ret = c("threshold", "sensitivity", "specificity"))
+youden_threshold3 <- as.numeric(youden_coords3["threshold"])
+cat("Youden's optimal threshold (Model 3):", youden_threshold3, "\n")
+
+# 2. Apply threshold to predicted probabilities
+regression_val_clean$pred_class3 <- ifelse(regression_val_clean$pred_prob3 >= youden_threshold3, "Up to date", "Not up to date")
+regression_val_clean$pred_class3 <- factor(regression_val_clean$pred_class3, levels = c("Not up to date", "Up to date"))
+
+# 3. Confusion matrix, sensitivity, specificity
+conf3 <- confusionMatrix(regression_val_clean$pred_class3, regression_val_clean$Sanitary_pass, positive = "Up to date")
+print(conf3)
+
+# 4. Matthews Correlation Coefficient (MCC)
+regression_val_clean$Sanitary_pass_bin3 <- ifelse(regression_val_clean$Sanitary_pass == "Up to date", 1, 0)
+regression_val_clean$pred_class_bin3 <- ifelse(regression_val_clean$pred_class3 == "Up to date", 1, 0)
+mcc_val3 <- mltools::mcc(
+  preds = regression_val_clean$pred_class_bin3,
+  actuals = regression_val_clean$Sanitary_pass_bin3
+)
+cat("Matthews Correlation Coefficient (MCC, Model 3):", mcc_val3, "\n")
+
+# 5. AUC-ROC
+auc_val3 <- auc(roc_obj3)
+cat("AUC-ROC (Model 3):", auc_val3, "\n")
+
+```
+
+#### 4.7.1. AUC-ROC Plot
+
+```{r AUC-ROC Plot Unadjusted model, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+png("X:/Camila/7C_LCA/roc_curve_UNADJUSTED_UPTODATE.png", width = 800, height = 600, res = 120)
+
+# Find Youden's associated sensitivity/specificity for model 3
+youden_sens3 <- as.numeric(youden_coords3["sensitivity"])
+youden_spec3 <- as.numeric(youden_coords3["specificity"])
+
+# ROC curve for model 3
+plot(roc_obj3, col = "#117733", lwd = 2, legacy.axes = TRUE, main = "ROC Curve UP (Unadjusted) UP TO DATE VACCINATION")
+
+# Add vertical line at Youden's Index optimal cut-off (x = 1 - specificity, y = sensitivity)
+x_youden3 <- 1 - youden_spec3
+y_youden3 <- youden_sens3
+abline(v = x_youden3, col = "#E8A95D", lwd = 2, lty = 3)
+
+# Add marker at Youden's point
+points(x_youden3, y_youden3, col = "#E8A95D", pch = 19, cex = 1.5)
+text(x_youden3, y_youden3, labels = "Youden", pos = 4, col = "#E8A95D", cex = 0.9)
+
+# Add AUC and threshold to legend
+legend("bottomright", legend = c(
+  paste("AUC =", round(auc_val3, 3)),
+  paste("Youden's Index threshold =", round(youden_threshold3, 3))
+), bty = "n")
+
+dev.off()
+
+```
+
+### 4.8. "Uptake Speed" - Predict probabilities
+
+```{r Predict validation set Uptake Speed, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+regression_val_clean$pred_prob4 <- predict(mdl_Uptake_speed,
+                                           newdata = regression_val_clean,
+                                           type = "response")
+```
+
+### 4.9."Uptake Speed" - Youden's Index for optimal threshold, MCC and AUC-ROC
+
+```{r Youden's Index for unadjusted model - "Uptake Speed", echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# 1. Compute ROC curve for Uptake_speed prediction from 4th model
+roc_obj_speed4 <- roc(
+  regression_val_clean$Uptake_speed,
+  regression_val_clean$pred_prob4,
+  levels = c("Not_delayed", "Delayed"),
+  direction = "<"
+)
+
+# Find optimal threshold using Youden's Index
+youden_coords_speed4 <- coords(
+  roc_obj_speed4,
+  "best",
+  best.method = "youden",
+  ret = c("threshold", "sensitivity", "specificity")
+)
+youden_threshold_speed4 <- as.numeric(youden_coords_speed4["threshold"])
+cat("Youden's optimal threshold (Model 4 - Uptake speed):", youden_threshold_speed4, "\n")
+
+# 2. Classify based on predicted probability and Youden's threshold
+regression_val_clean$pred_class_speed4 <- ifelse(
+  regression_val_clean$pred_prob4 >= youden_threshold_speed4,
+  "Delayed", "Not_delayed"
+)
+
+# Convert to factor with correct order
+regression_val_clean$pred_class_speed4 <- factor(
+  regression_val_clean$pred_class_speed4,
+  levels = c("Not_delayed", "Delayed")
+)
+
+# 3. Confusion matrix, sensitivity, specificity
+conf_speed4 <- confusionMatrix(
+  regression_val_clean$pred_class_speed4,
+  regression_val_clean$Uptake_speed,
+  positive = "Delayed"
+)
+print(conf_speed4)
+
+# 4. Matthews Correlation Coefficient (MCC)
+regression_val_clean$Uptake_speed_bin4 <- ifelse(regression_val_clean$Uptake_speed == "Delayed", 1, 0)
+regression_val_clean$pred_class_speed_bin4 <- ifelse(regression_val_clean$pred_class_speed4 == "Delayed", 1, 0)
+
+mcc_val_speed4 <- mltools::mcc(
+  preds = regression_val_clean$pred_class_speed_bin4,
+  actuals = regression_val_clean$Uptake_speed_bin4
+)
+cat("Matthews Correlation Coefficient (MCC, Model 4):", mcc_val_speed4, "\n")
+
+# 5. AUC-ROC
+auc_val_speed4 <- auc(roc_obj_speed4)
+cat("AUC-ROC (Model 4 - Uptake speed):", auc_val_speed4, "\n")
+
+```
+
+#### 4.9.1. AUC-ROC Plot "Uptake Speed"
+
+```{r AUC-ROC Plot Unadjusted model "Uptake Speed", echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+png("X:/Camila/7C_LCA/roc_curve_UNADJUSTED_UPTAKE_SPEED.png", width = 800, height = 600, res = 120)
+
+# Find Youden's associated sensitivity/specificity for model 4
+youden_sens4 <- as.numeric(youden_coords_speed4["sensitivity"])
+youden_spec4 <- as.numeric(youden_coords_speed4["specificity"])
+
+# ROC curve for model 4
+plot(roc_obj_speed4, col = "#117733", lwd = 2, legacy.axes = TRUE,
+     main = "ROC Curve (Unadjusted) – Uptake Speed")
+
+# Add vertical line at Youden's Index optimal cut-off (x = 1 - specificity, y = sensitivity)
+x_youden4 <- 1 - youden_spec4
+y_youden4 <- youden_sens4
+abline(v = x_youden4, col = "#E8A95D", lwd = 2, lty = 3)
+
+# Add marker at Youden's point
+points(x_youden4, y_youden4, col = "#E8A95D", pch = 19, cex = 1.5)
+text(x_youden4, y_youden4, labels = "Youden", pos = 4, col = "#E8A95D", cex = 0.9)
+
+# Add AUC and threshold to legend
+legend("bottomright", legend = c(
+  paste("AUC =", round(auc_val_speed4, 3)),
+  paste("Youden's Index threshold =", round(youden_threshold_speed4, 3))
+), bty = "n")
+
+dev.off()
+```
+
+
+# "CONTROL DATASET"
+
+# 5. PREDICTION - Control group 
+
+### 5.1. Setting up control group
+
+```{r Controls setting up, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+# 1. Compute Posterior Probabilities for CONTROL dataset
+manifest_vars <- c("C3_1", "C3_2", "C3_3", "C3_4", "C3_5", "C4", "C5")
+
+control_post_probs <- poLCA.posterior(
+  best_model,
+  control[, manifest_vars, drop = FALSE]
+)
+
+# 2. Function to assign most likely class
+assign_class <- function(probs_row) {
+  max_val <- max(probs_row, na.rm = TRUE)
+  max_classes <- which(probs_row == max_val)
+  chosen_class <- if (length(max_classes) > 1) sample(max_classes, 1) else max_classes
+  binary_row <- rep(0, length(probs_row))
+  binary_row[chosen_class] <- 1
+  return(binary_row)
+}
+
+# 3. Apply assignment to all rows
+class_control <- t(apply(control_post_probs, 1, assign_class))
+colnames(class_control) <- paste0("Class_", 1:ncol(class_control))
+prob_class_control <- as.data.frame(class_control)
+prob_class_control$ID_check <- control$IDIPSOS
+
+# 4. Join with original CONTROL data and recode class columns
+
+regression_control <- prob_class_control %>%
+  left_join(control, by = c("ID_check" = "IDIPSOS")) %>%
+  mutate(across(starts_with("Class_"),
+                ~ factor(.x, levels = c(0, 1), labels = c("No", "Yes"))))
+
+str(regression_control)
+
+# Define predictor variables used in the model
+vars_predictors <- c(
+  "Class_1", "Class_2", "Class_3", "Class_4", "Class_5", "Class_6", "Class_7",
+  "Sex", "Age", "Professions", "Education", 
+  "Country_of_birth", "Comorbidities", "Region"
+)
+
+# Filter complete cases for the control dataset
+regression_control_clean <- regression_control[complete.cases(regression_control[, vars_predictors]), ]
+
+```
+
+NOTE: Final dataframe name *regression_control_clean*, after cleaning predictive variables CCA.
+
+## "MIXED EFFECTS METHODS REGRESSION"
+
+### 5.2. "Up to date" predicted probabilities
+
+```{r Predict control dataset, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+regression_control_clean$pred_prob <- predict(
+  mix_mdl_Sanitary_pass,
+  newdata = regression_control_clean,
+  type = "response",
+  allow.new.levels = TRUE
+)
+```
+
+### 5.3. Youden's Index for optimal threshold, MCC and AUC-ROC
+
+```{r Youden's Index mixed effects model control, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# 1. Compute ROC and optimal threshold (Youden's Index)
+roc_obj_control <- roc(
+  regression_control_clean$Sanitary_pass,
+  regression_control_clean$pred_prob,
+  levels = c("Not up to date", "Up to date"),
+  direction = "<"
+)
+
+youden_coords_control <- coords(
+  roc_obj_control, 
+  "best", 
+  best.method = "youden", 
+  ret = c("threshold", "sensitivity", "specificity")
+)
+youden_threshold_control <- as.numeric(youden_coords_control["threshold"])
+cat("Youden's optimal threshold (control):", youden_threshold_control, "\n")
+
+# 2. Apply threshold to predicted probabilities
+regression_control_clean$pred_class <- ifelse(
+  regression_control_clean$pred_prob >= youden_threshold_control,
+  "Up to date", "Not up to date"
+)
+regression_control_clean$pred_class <- factor(
+  regression_control_clean$pred_class,
+  levels = c("Not up to date", "Up to date")
+)
+
+# 3. Confusion matrix, sensitivity, specificity
+conf_control <- confusionMatrix(
+  regression_control_clean$pred_class,
+  regression_control_clean$Sanitary_pass,
+  positive = "Up to date"
+)
+print(conf_control)
+
+# 4. Matthews Correlation Coefficient (MCC)
+regression_control_clean$Sanitary_pass_bin <- ifelse(regression_control_clean$Sanitary_pass == "Up to date", 1, 0)
+regression_control_clean$pred_class_bin <- ifelse(regression_control_clean$pred_class == "Up to date", 1, 0)
+
+mcc_val_control <- mltools::mcc(
+  preds = regression_control_clean$pred_class_bin,
+  actuals = regression_control_clean$Sanitary_pass_bin
+)
+cat("Matthews Correlation Coefficient (MCC):", mcc_val_control, "\n")
+
+# 5. AUC-ROC
+auc_val_control <- auc(roc_obj_control)
+cat("AUC-ROC (control):", auc_val_control, "\n")
+
+```
+
+#### 5.3.1. AUC-ROC Plot Mixed effects
+
+```{r AUC-ROC Plot Mixed effects control, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+png("X:/Camila/7C_LCA/roc_curve_mixed_effects_control.png", width = 800, height = 600, res = 120)
+
+# Find Youden's associated sensitivity/specificity
+youden_sens_control <- as.numeric(youden_coords_control["sensitivity"])
+youden_spec_control <- as.numeric(youden_coords_control["specificity"])
+
+# ROC curve for control dataset
+plot(
+  roc_obj_control,
+  col = "#3440AF",
+  lwd = 2,
+  legacy.axes = TRUE,
+  main = "ROC Curve (Control Dataset)"
+)
+
+# Add vertical line at Youden's Index optimal cut-off
+x_youden_control <- 1 - youden_spec_control
+y_youden_control <- youden_sens_control
+abline(v = x_youden_control, col = "#B5420C", lwd = 2, lty = 3)
+
+# Add marker at Youden's point
+points(x_youden_control, y_youden_control, col = "#B5420C", pch = 19, cex = 1.5)
+text(x_youden_control, y_youden_control, labels = "Youden", pos = 4, col = "#B5420C", cex = 0.9)
+
+# Add AUC and threshold in the legend
+legend(
+  "bottomright",
+  legend = c(
+    paste("AUC =", round(auc_val_control, 3)),
+    paste("Youden's Index threshold =", round(youden_threshold_control, 3))
+  ),
+  bty = "n"
+)
+
+dev.off()
+
+```
+
+### 5.4. "Uptake speed" predicted probabilities mixed-methods
+
+```{r Predict validation set uptake speed, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+regression_control_clean$pred_prob2 <- predict(
+  mix_mdl_Uptake_speed,
+  newdata = regression_control_clean,
+  type = "response",
+  allow.new.levels = TRUE
+)
+
+```
+
+### 5.5. "Uptake speed" Youden's Index for optimal threshold, MCC and AUC-ROC
+
+```{r Youden's Index mixed effects model uptake, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# 1. Compute ROC curve for Uptake_speed prediction on control dataset
+roc_obj_speed_control <- roc(
+  regression_control_clean$Uptake_speed,
+  regression_control_clean$pred_prob2,
+  levels = c("Not_delayed", "Delayed"),
+  direction = "<"
+)
+
+# Find optimal threshold using Youden's Index
+youden_coords_speed_control <- coords(
+  roc_obj_speed_control,
+  "best",
+  best.method = "youden",
+  ret = c("threshold", "sensitivity", "specificity")
+)
+youden_threshold_speed_control <- as.numeric(youden_coords_speed_control["threshold"])
+cat("Youden's optimal threshold (Uptake speed - control):", youden_threshold_speed_control, "\n")
+
+# 2. Classify based on predicted probability and Youden's threshold
+regression_control_clean$pred_class_speed <- ifelse(
+  regression_control_clean$pred_prob2 >= youden_threshold_speed_control,
+  "Delayed", "Not_delayed"
+)
+
+# Convert to factor with correct order
+regression_control_clean$pred_class_speed <- factor(
+  regression_control_clean$pred_class_speed,
+  levels = c("Not_delayed", "Delayed")
+)
+
+# 3. Confusion matrix, sensitivity, specificity
+conf_speed_control <- confusionMatrix(
+  regression_control_clean$pred_class_speed,
+  regression_control_clean$Uptake_speed,
+  positive = "Delayed"
+)
+print(conf_speed_control)
+
+# 4. Matthews Correlation Coefficient (MCC)
+regression_control_clean$Uptake_speed_bin <- ifelse(regression_control_clean$Uptake_speed == "Delayed", 1, 0)
+regression_control_clean$pred_class_speed_bin <- ifelse(regression_control_clean$pred_class_speed == "Delayed", 1, 0)
+
+# Calculate MCC
+mcc_val_speed_control <- mltools::mcc(
+  preds = regression_control_clean$pred_class_speed_bin,
+  actuals = regression_control_clean$Uptake_speed_bin
+)
+cat("Matthews Correlation Coefficient (MCC - control):", mcc_val_speed_control, "\n")
+
+# 5. AUC-ROC
+auc_val_speed_control <- auc(roc_obj_speed_control)
+cat("AUC-ROC (Uptake speed - control):", auc_val_speed_control, "\n")
+
+```
+
+#### 5.5.1. AUC-ROC Plot
+
+```{r AUC-ROC Plot Mixed effects, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# Save ROC curve to PNG for Uptake Speed (Control Dataset)
+png("X:/Camila/7C_LCA/roc_curve_mixed_effects_uptake_speed_control.png", width = 800, height = 600, res = 120)
+
+# Plot ROC
+plot(roc_obj_speed_control, col = "#3440AF", lwd = 2, legacy.axes = TRUE, main = "ROC Curve - Uptake Speed (Control)")
+
+# Extract sensitivity & specificity
+youden_sens_speed_control <- as.numeric(youden_coords_speed_control["sensitivity"])
+youden_spec_speed_control <- as.numeric(youden_coords_speed_control["specificity"])
+
+# Coordinates for Youden's point
+x_youden_speed_control <- 1 - youden_spec_speed_control
+y_youden_speed_control <- youden_sens_speed_control
+
+# Add vertical line and marker
+abline(v = x_youden_speed_control, col = "#B5420C", lwd = 2, lty = 3)
+points(x_youden_speed_control, y_youden_speed_control, col = "#B5420C", pch = 19, cex = 1.5)
+text(x_youden_speed_control, y_youden_speed_control, labels = "Youden", pos = 4, col = "#B5420C", cex = 0.9)
+
+# Add legend
+legend("bottomright", legend = c(
+  paste("AUC =", round(auc_val_speed_control, 3)),
+  paste("Youden's Index threshold =", round(youden_threshold_speed_control, 3))
+), bty = "n")
+
+# Close device
+dev.off()
+
+```
+
+
+## "UNADJUSTED REGRESSION MODEL"
+
+### 5.6. "Up to date" - Predict probabilities
+
+```{r Predict Up to date control, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+regression_control_clean$pred_prob3 <- predict(mdl_Sanitary_pass,
+                                           newdata = regression_control_clean,
+                                           type = "response")
+```
+
+### 5.7."Up to date" - Youden's Index for optimal threshold, MCC and AUC-ROC
+
+```{r Youden's Index for unadjusted model - Up to date, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# 1. Compute ROC and optimal threshold (Youden's Index)
+roc_obj_control3 <- roc(
+  regression_control_clean$Sanitary_pass,
+  regression_control_clean$pred_prob3,
+  levels = c("Not up to date", "Up to date"),
+  direction = "<"
+)
+youden_coords_control3 <- coords(
+  roc_obj_control3, 
+  "best", 
+  best.method = "youden", 
+  ret = c("threshold", "sensitivity", "specificity")
+)
+youden_threshold_control3 <- as.numeric(youden_coords_control3["threshold"])
+cat("Youden's optimal threshold (Control, Model 3):", youden_threshold_control3, "\n")
+
+# 2. Apply threshold to predicted probabilities
+regression_control_clean$pred_class3 <- ifelse(
+  regression_control_clean$pred_prob3 >= youden_threshold_control3,
+  "Up to date",
+  "Not up to date"
+)
+regression_control_clean$pred_class3 <- factor(
+  regression_control_clean$pred_class3,
+  levels = c("Not up to date", "Up to date")
+)
+
+# 3. Confusion matrix, sensitivity, specificity
+conf_control3 <- confusionMatrix(
+  regression_control_clean$pred_class3,
+  regression_control_clean$Sanitary_pass,
+  positive = "Up to date"
+)
+print(conf_control3)
+
+# 4. Matthews Correlation Coefficient (MCC)
+regression_control_clean$Sanitary_pass_bin3 <- ifelse(
+  regression_control_clean$Sanitary_pass == "Up to date", 1, 0
+)
+regression_control_clean$pred_class_bin3 <- ifelse(
+  regression_control_clean$pred_class3 == "Up to date", 1, 0
+)
+mcc_val_control3 <- mltools::mcc(
+  preds = regression_control_clean$pred_class_bin3,
+  actuals = regression_control_clean$Sanitary_pass_bin3
+)
+cat("Matthews Correlation Coefficient (MCC, Control, Model 3):", mcc_val_control3, "\n")
+
+# 5. AUC-ROC
+auc_val_control3 <- auc(roc_obj_control3)
+cat("AUC-ROC (Control, Model 3):", auc_val_control3, "\n")
+
+```
+
+#### 5.7.1. AUC-ROC Plot
+
+```{r AUC-ROC Plot Unadjusted model, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+png("X:/Camila/7C_LCA/roc_curve_UNADJUSTED_UPTODATE_CONTROL.png", width = 800, height = 600, res = 120)
+
+# Extract Youden's sensitivity and specificity
+youden_sens_control3 <- as.numeric(youden_coords_control3["sensitivity"])
+youden_spec_control3 <- as.numeric(youden_coords_control3["specificity"])
+
+# Plot ROC curve
+plot(roc_obj_control3, col= "#117733", lwd=2, legacy.axes=TRUE,
+     main="ROC Curve Control (Unadjusted) UP TO DATE VACCINATION")
+
+# Add vertical line at Youden's threshold
+x_youden_control3 <- 1 - youden_spec_control3
+y_youden_control3 <- youden_sens_control3
+abline(v = x_youden_control3, col = "#E8A95D", lwd = 2, lty=3)
+
+# Add point and label for Youden's index
+points(x_youden_control3, y_youden_control3, col= "#E8A95D", pch=19, cex=1.5)
+text(x_youden_control3, y_youden_control3, labels = "Youden", pos=4, col= "#E8A95D", cex=0.9)
+
+# Add legend with AUC and threshold
+legend("bottomright", legend = c(
+  paste("AUC =", round(auc_val_control3, 3)),
+  paste("Youden's Index threshold =", round(youden_threshold_control3, 3))
+), bty="n")
+
+dev.off()
+
+```
+
+### 5.8. "Uptake Speed" - Predict probabilities
+
+```{r Predict validation set Uptake Speed, echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+regression_control_clean$pred_prob4 <- predict(mdl_Uptake_speed,
+                                           newdata = regression_control_clean,
+                                           type = "response")
+```
+
+### 5.9."Uptake Speed" - Youden's Index for optimal threshold, MCC and AUC-ROC
+
+```{r Youden's Index for unadjusted model - "Uptake Speed", echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+# 1. Compute ROC curve for Uptake_speed prediction ---
+roc_obj_speed4 <- roc(
+  regression_control_clean$Uptake_speed,
+  regression_control_clean$pred_prob4,
+  levels = c("Not_delayed", "Delayed"),
+  direction = "<"
+)
+
+# Find optimal threshold using Youden's Index
+youden_coords_speed4 <- coords(
+  roc_obj_speed4,
+  "best",
+  best.method = "youden",
+  ret = c("threshold", "sensitivity", "specificity")
+)
+youden_threshold_speed4 <- as.numeric(youden_coords_speed4["threshold"])
+cat("Youden's optimal threshold (Model 4 - Uptake speed, Control):", youden_threshold_speed4, "\n")
+
+# 2. Classify based on predicted probability and Youden's threshold ---
+regression_control_clean$pred_class_speed4 <- ifelse(
+  regression_control_clean$pred_prob4 >= youden_threshold_speed4,
+  "Delayed", "Not_delayed"
+)
+
+# Convert to factor with correct order
+regression_control_clean$pred_class_speed4 <- factor(
+  regression_control_clean$pred_class_speed4,
+  levels = c("Not_delayed", "Delayed")
+)
+
+# 3. Confusion matrix, sensitivity, specificity
+conf_speed4 <- confusionMatrix(
+  regression_control_clean$pred_class_speed4,
+  regression_control_clean$Uptake_speed,
+  positive = "Delayed"
+)
+print(conf_speed4)
+
+# 4. Matthews Correlation Coefficient (MCC)
+regression_control_clean$Uptake_speed_bin4 <- ifelse(
+  regression_control_clean$Uptake_speed == "Delayed", 1, 0
+)
+regression_control_clean$pred_class_speed_bin4 <- ifelse(
+  regression_control_clean$pred_class_speed4 == "Delayed", 1, 0
+)
+
+mcc_val_speed4 <- mltools::mcc(
+  preds = regression_control_clean$pred_class_speed_bin4,
+  actuals = regression_control_clean$Uptake_speed_bin4
+)
+cat("Matthews Correlation Coefficient (MCC, Model 4 - Control):", mcc_val_speed4, "\n")
+
+# 5. AUC-ROC
+auc_val_speed4 <- auc(roc_obj_speed4)
+cat("AUC-ROC (Model 4 - Uptake speed, Control):", auc_val_speed4, "\n")
+
+```
+
+#### 5.9.1. AUC-ROC Plot "Uptake Speed"
+
+```{r AUC-ROC Plot Unadjusted model "Uptake Speed", echo=FALSE, warning=FALSE, message=FALSE, include=TRUE}
+
+png("X:/Camila/7C_LCA/roc_curve_UNADJUSTED_UPTAKE_SPEED_CONTROL.png", width = 800, height = 600, res = 120)
+
+# Extract Youden's sensitivity and specificity from the control dataset variables
+youden_sens4 <- as.numeric(youden_coords_speed4["sensitivity"])
+youden_spec4 <- as.numeric(youden_coords_speed4["specificity"])
+
+# Plot ROC curve for the control dataset, Model 4 Uptake Speed
+plot(roc_obj_speed4, col = "#117733", lwd = 2, legacy.axes = TRUE,
+     main = "ROC Curve Control (Unadjusted) – Uptake Speed")
+
+# Add vertical line at Youden's threshold (x = 1 - specificity)
+x_youden4 <- 1 - youden_spec4
+y_youden4 <- youden_sens4
+abline(v = x_youden4, col = "#E8A95D", lwd = 2, lty = 3)
+
+# Add point and label for Youden's index on the ROC curve
+points(x_youden4, y_youden4, col = "#E8A95D", pch = 19, cex = 1.5)
+text(x_youden4, y_youden4, labels = "Youden", pos = 4, col = "#E8A95D", cex = 0.9)
+
+# Add legend showing AUC and Youden's threshold values
+legend("bottomright", legend = c(
+  paste("AUC =", round(auc_val_speed4, 3)),
+  paste("Youden's Index threshold =", round(youden_threshold_speed4, 3))
+), bty = "n")
+
+dev.off()
+```
